@@ -152,11 +152,8 @@ def render_rows(subreddit, page, url_gen, restrictions):
     subs = get_subs(username)
     if len(subs) == 0:
         abort(403)
-    if subreddit is not None and subreddit not in subs:
+    if subreddit not in subs:
         abort(403)
-
-    if subreddit is None:
-        subreddit = subs[0]
 
     try:
         subreddit_id = next(
@@ -195,14 +192,26 @@ def render_rows(subreddit, page, url_gen, restrictions):
                            num_pages=num_pages, username=username)
 
 @app.route("/")
-@app.route("/<subreddit>/")
-@app.route("/<subreddit>/page/<int:page>/")
-def index(subreddit=None, page=1):
-    url_gen = lambda x: url_for('index', subreddit=subreddit, page=x)
+@app.route("/biggest")
+def index():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+
+    username = session['username']
+    subs = get_subs(username)
+    if len(subs) == 0:
+        abort(403)
+
+    return redirect(url_for('by_sub', subreddit=subs[0]))
+
+@app.route("/r/<subreddit>/")
+@app.route("/r/<subreddit>/page/<int:page>/")
+def by_sub(subreddit, page=1):
+    url_gen = lambda x: url_for('by_sub', subreddit=subreddit, page=x)
     return render_rows(subreddit, page, url_gen, {})
 
-@app.route("/<subreddit>/mod/<username>/")
-@app.route("/<subreddit>/mod/<username>/page/<int:page>/")
+@app.route("/r/<subreddit>/mod/<username>/")
+@app.route("/r/<subreddit>/mod/<username>/page/<int:page>/")
 def by_mod(subreddit=None, username=None, page=1):
     db = get_db()
     mod_id = get_id_by_username(username)
@@ -213,8 +222,8 @@ def by_mod(subreddit=None, username=None, page=1):
     return render_rows(subreddit, page, url_gen,
                        restrictions={'a.moderator': mod_id})
 
-@app.route("/<subreddit>/author/<username>/")
-@app.route("/<subreddit>/author/<username>/page/<int:page>/")
+@app.route("/r/<subreddit>/author/<username>/")
+@app.route("/r/<subreddit>/author/<username>/page/<int:page>/")
 def by_author(subreddit=None, username=None, page=1):
     db = get_db()
     author_id = get_id_by_username(username)
