@@ -4,15 +4,16 @@ import math
 import sqlite3
 import base36
 import urllib.parse
+import redis
 import requests
 import requests.auth
+import time
 from uuid import uuid4
 from flask import Flask, render_template, g, abort, url_for, session, redirect, request
 
 
 app = Flask(__name__)
 
-app.config.auth_base = config.AUTH_BASE
 app.secret_key = config.SECRET_KEY
 app.config.database = config.DATABASE
 
@@ -20,10 +21,10 @@ app.config.client_id = config.CLIENT_ID
 app.config.client_secret = config.CLIENT_SECRET
 app.config.redirect_uri = config.REDIRECT_URI
 
-def get_auth_base():
-    if not hasattr(g, 'auth_base'):
-        g.auth_base = sqlite3.connect(app.config.auth_base)
-    return g.auth_base
+def get_redis():
+    if not hasattr(g, 'redis'):
+        g.redis = redis.StrictRedis(host='localhost', port=6379, db=0)
+    return g.redis
 
 def connect_db():
     rv = sqlite3.connect(app.config.database, uri=True)
@@ -48,17 +49,15 @@ def base_headers():
     return {"User-Agent": user_agent()}
 
 def save_created_state(state):
-    db = get_auth_base()
-    db.execute("INSERT INTO states (state) "
-                            "VALUES (?)", (state,))
-    db.commit()
+    r = get_redis()
+    r.zadd("states", time.time() + 600, state)
 
 def is_valid_state(state):
-    result = next(get_auth_base().execute("SELECT 1 FROM states "
-                                          "WHERE state = ?",
-                                          (state,)),
-                  None)
-    return (result is not None)
+    r = get_redis()
+    pipe = r.pipeline()
+    pipe.zremrangebyscore("states", "-inf", time.time())
+    pipe.zscore("states", state)
+    return pipe.execute()[1] is not None
 
 def make_authorization_url():
     # Generate a random string for the state parameter
