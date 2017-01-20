@@ -86,6 +86,15 @@ def get_token(code):
     token_json = response.json()
     return token_json["access_token"]
 
+def get_id_by_username(username):
+    db = get_db()
+    try:
+        return next(
+            db.execute("SELECT id FROM users WHERE upper(username) = upper(?)",
+                       (username,)))["id"]
+    except StopIteration:
+        abort(404)
+
 def get_username(access_token):
     headers = base_headers()
     headers.update({"Authorization": "bearer " + access_token})
@@ -196,12 +205,7 @@ def index(subreddit=None, page=1):
 @app.route("/<subreddit>/mod/<username>/page/<int:page>/")
 def by_mod(subreddit=None, username=None, page=1):
     db = get_db()
-    try:
-        mod_id = next(
-            db.execute("SELECT id FROM users WHERE upper(username) = upper(?)",
-                       (username,)))["id"]
-    except StopIteration:
-        abort(404)
+    mod_id = get_id_by_username(username)
 
     url_gen = lambda x: url_for('by_mod', subreddit=subreddit,
                                 username=username, page=x)
@@ -213,12 +217,7 @@ def by_mod(subreddit=None, username=None, page=1):
 @app.route("/<subreddit>/author/<username>/page/<int:page>/")
 def by_author(subreddit=None, username=None, page=1):
     db = get_db()
-    try:
-        author_id = next(
-            db.execute("SELECT id FROM users WHERE upper(username) = upper(?)",
-                       (username,)))["id"]
-    except StopIteration:
-        abort(404)
+    author_id = get_id_by_username(username)
 
     url_gen = lambda x: url_for('by_author', subreddit=subreddit,
                                 username=username, page=x)
