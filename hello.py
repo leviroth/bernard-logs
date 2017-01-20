@@ -133,13 +133,14 @@ def get_where_clauses(restrictions):
 
 def get_subs(username):
     db = get_db()
-    subs_rows = db.execute("""SELECT s.display_name, s.subscribers
+    rows = db.execute("""SELECT s.display_name
     FROM subreddits s
     LEFT JOIN subreddit_moderator sm ON (s.id = sm.subreddit_id)
     LEFT JOIN users u ON (u.id = sm.moderator_id)
     WHERE upper(u.username) = upper(?)
+    ORDER BY subscribers DESC
     """, (username,))
-    return {subs_row[0]: subs_row[1] for subs_row in subs_rows}
+    return [row[0] for row in rows]
 
 def render_rows(subreddit, page, url_gen, restrictions):
     if 'username' not in session:
@@ -154,9 +155,8 @@ def render_rows(subreddit, page, url_gen, restrictions):
     if subreddit is not None and subreddit not in subs:
         abort(403)
 
-    sorted_subs = [x[0] for x in sorted(subs.items(), key=lambda x: -x[1])]
     if subreddit is None:
-        subreddit = sorted_subs[0]
+        subreddit = subs[0]
 
     try:
         subreddit_id = next(
@@ -190,7 +190,7 @@ def render_rows(subreddit, page, url_gen, restrictions):
     rows = db.execute(sql_command,
                       tuple(restrictions.values()) + (offset,))
     return render_template('index.html', rows=rows, b36converter=base36.dumps,
-                           subs=sorted_subs, subreddit=subreddit, page=page,
+                           subs=subs, subreddit=subreddit, page=page,
                            prev_url=prev_url, next_url=next_url,
                            num_pages=num_pages, username=username)
 
