@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link
+      rel="stylesheet"
+      href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
+      integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+      crossorigin="anonymous"
+    >
+    <link
+      rel="stylesheet"
+      href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css"
+      integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp"
+      crossorigin="anonymous"
+    >
+    <link rel="stylesheet" href="/static/dashboard.css" >
+    <title>BernardJOrtcutt logs</title>
+  </head>
+  <body>
+    <nav class="navbar navbar-inverse navbar-fixed-top">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+            <span class="sr-only">Toggle navigation</span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <a class="navbar-brand" href="#">Bernard J. Ortcutt</a>
+        </div>
+        <div id="navbar" class="navbar-collapse collapse">
+          <ul class="nav navbar-nav navbar-right">
+            <li><a href="#" >{{ username }}</a></li>
+            <li><a href="/logout" >Log out</a></li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-sm-3 col-md-2 sidebar">
+          <ul class="nav nav-sidebar">
+            {% for sub in subs %}
+              {% if subreddit == sub %}
+                <li class="active">
+                  <a href="{{ url_for('by_sub', subreddit=sub) }}">/r/{{ sub }}<span class="sr-only">(current)</span></a>
+                </li>
+              {% else %}
+                <li><a href="{{ url_for('by_sub', subreddit=sub) }}">/r/{{ sub }}</a></li>
+              {% endif %}
+            {% endfor %}
+          </ul>
+          <ul class="nav nav-sidebar">
+            <li><a href="/static/{{ subreddit }}.html" >Commands</a></li>
+          </ul>
+        </div>
+        <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
+          <h1 class="page-header">Actions</h1>
+          <div>
+            {% if prev_url != None %}
+              <a href="{{ prev_url }}"><<</a>
+            {% endif %}
+            Page {{ page }} of {{ num_pages }}
+            {% if next_url != None %}
+              <a href="{{ next_url }}">>></a></div>
+            {% endif %}
+          <div class="table-responsive">
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Moderator</th>
+                  <th>Target</th>
+                  <th>Author</th>
+                  <th>Action</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                  <tr>
+                    <td>{{row['time']}}</td>
+                    <td><a href="{{ url_for('by_mod', subreddit=subreddit, username=row['mod']) }}">{{row['mod']}}</a></td>
+                    <td><a
+                          href="https://reddit.com/api/info?id=t{{b36converter(row['target_type'])}}_{{b36converter(row['target_id'])}}"
+                        >link</a>
+                    </td>
+                    <td><a href="{{ url_for('by_author', subreddit=subreddit, username=row['author']) }}">{{row['author']}}</a></td>
+                    <td>{{row['action_summary']}}</td>
+                    <td>{{row['action_details']}}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <script
+      src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
+      integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+      crossorigin="anonymous">
+    </script>
+  </body>
+</html>
