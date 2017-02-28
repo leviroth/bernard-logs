@@ -1,40 +1,44 @@
-import config
-import os
-import math
-import sqlite3
 import base36
-import urllib.parse
+import config
+import functools
+import math
 import redis
 import requests
 import requests.auth
+import sqlite3
 import time
+import urllib.parse
 from uuid import uuid4
-from flask import Flask, render_template, g, abort, url_for, session, redirect, request
+from flask import (Flask, render_template, g, abort, url_for, session,
+                   redirect, request)
 
 
 app = Flask(__name__)
 
 app.secret_key = config.SECRET_KEY
 app.config.database = config.DATABASE
-
 app.config.client_id = config.CLIENT_ID
 app.config.client_secret = config.CLIENT_SECRET
 app.config.redirect_uri = config.REDIRECT_URI
+
 
 def get_redis():
     if not hasattr(g, 'redis'):
         g.redis = redis.StrictRedis(host='localhost', port=6379, db=0)
     return g.redis
 
+
 def connect_db():
     rv = sqlite3.connect(app.config.database, uri=True)
     rv.row_factory = sqlite3.Row
     return rv
 
+
 def get_db():
     if not hasattr(g, 'sqlite_db'):
         g.sqlite_db = connect_db()
     return g.sqlite_db
+
 
 def user_agent():
     '''reddit API clients should each have their own, unique user-agent
@@ -45,12 +49,18 @@ def user_agent():
     '''
     return "BJO logs by /u/TheGrammarBolshevik"
 
+
+# The following five functions are adapted from reddit's tutorial on OAuth:
+# https://github.com/reddit/reddit/wiki/OAuth2-Python-Example
+
 def base_headers():
     return {"User-Agent": user_agent()}
+
 
 def save_created_state(state):
     r = get_redis()
     r.zadd("states", time.time() + 600, state)
+
 
 def is_valid_state(state):
     r = get_redis()
@@ -58,6 +68,7 @@ def is_valid_state(state):
     pipe.zremrangebyscore("states", "-inf", time.time())
     pipe.zscore("states", state)
     return pipe.execute()[1] is not None
+
 
 def make_authorization_url():
     # Generate a random string for the state parameter
@@ -70,11 +81,14 @@ def make_authorization_url():
               "redirect_uri": app.config.redirect_uri,
               "duration": "temporary",
               "scope": "identity"}
-    url = "https://ssl.reddit.com/api/v1/authorize?" + urllib.parse.urlencode(params)
+    url = "https://ssl.reddit.com/api/v1/authorize?" + \
+          urllib.parse.urlencode(params)
     return url
 
+
 def get_token(code):
-    client_auth = requests.auth.HTTPBasicAuth(app.config.client_id, app.config.client_secret)
+    client_auth = requests.auth.HTTPBasicAuth(app.config.client_id,
+                                              app.config.client_secret)
     post_data = {"grant_type": "authorization_code",
                  "code": code,
                  "redirect_uri": app.config.redirect_uri}
@@ -86,6 +100,7 @@ def get_token(code):
     token_json = response.json()
     return token_json["access_token"]
 
+
 def get_id_by_username(username):
     db = get_db()
     try:
@@ -95,18 +110,22 @@ def get_id_by_username(username):
     except StopIteration:
         abort(404)
 
+
 def get_username(access_token):
     headers = base_headers()
     headers.update({"Authorization": "bearer " + access_token})
-    response = requests.get("https://oauth.reddit.com/api/v1/me", headers=headers)
+    response = requests.get("https://oauth.reddit.com/api/v1/me",
+                            headers=headers)
     me_json = response.json()
     return me_json['name']
+
 
 @app.route('/login')
 def login():
     return '''
     Log in via <a href="{}">reddit</a>.
     '''.format(make_authorization_url())
+
 
 @app.route('/authorize')
 def authorize():
@@ -121,15 +140,18 @@ def authorize():
     session['username'] = get_username(access_token)
     return redirect(url_for('index'))
 
+
 @app.route('/logout')
 def logout():
     # remove the username from the session if it's there
     session.pop('username', None)
     return redirect(url_for('index'))
 
+
 def get_where_clauses(restrictions):
     return "WHERE " + " AND ".join("{} = ?"
                                    .format(field) for field in restrictions)
+
 
 def get_subs(username):
     db = get_db()
@@ -141,6 +163,7 @@ def get_subs(username):
     ORDER BY subscribers DESC
     """, (username,))
     return [row[0] for row in rows]
+
 
 def render_rows(subreddit, page, url_gen, restrictions):
     if 'username' not in session:
@@ -170,8 +193,8 @@ def render_rows(subreddit, page, url_gen, restrictions):
                    .format(where_clauses=where_clauses),
                    tuple(restrictions.values())))[0]
     num_pages = math.ceil(num_rows / 25)
-    prev_url = url_gen(page - 1) if page > 1 else None
-    next_url = url_gen(page + 1) if page < num_pages else None
+    prev_url = url_gen(page=page - 1) if page > 1 else None
+    next_url = url_gen(page=page + 1) if page < num_pages else None
     offset = (page - 1) * 25
 
     sql_command = """SELECT a.time, mod.username mod, a.target_type,
@@ -191,6 +214,7 @@ def render_rows(subreddit, page, url_gen, restrictions):
                            prev_url=prev_url, next_url=next_url,
                            num_pages=num_pages, username=username)
 
+
 @app.route("/")
 @app.route("/biggest")
 def index():
@@ -204,36 +228,36 @@ def index():
 
     return redirect(url_for('by_sub', subreddit=subs[0]))
 
+
 @app.route("/r/<subreddit>/")
 @app.route("/r/<subreddit>/page/<int:page>/")
 def by_sub(subreddit, page=1):
-    url_gen = lambda x: url_for('by_sub', subreddit=subreddit, page=x)
+    url_gen = functools.partial(url_for, 'by_sub', subreddit=subreddit)
     return render_rows(subreddit, page, url_gen, {})
+
 
 @app.route("/r/<subreddit>/mod/<username>/")
 @app.route("/r/<subreddit>/mod/<username>/page/<int:page>/")
 def by_mod(subreddit=None, username=None, page=1):
-    db = get_db()
     mod_id = get_id_by_username(username)
-
-    url_gen = lambda x: url_for('by_mod', subreddit=subreddit,
-                                username=username, page=x)
+    url_gen = functools.partial(url_for, 'by_mod', subreddit=subreddit,
+                                username=username)
 
     return render_rows(subreddit, page, url_gen,
                        restrictions={'a.moderator': mod_id})
 
+
 @app.route("/r/<subreddit>/author/<username>/")
 @app.route("/r/<subreddit>/author/<username>/page/<int:page>/")
 def by_author(subreddit=None, username=None, page=1):
-    db = get_db()
     author_id = get_id_by_username(username)
 
-    url_gen = lambda x: url_for('by_author', subreddit=subreddit,
-                                username=username, page=x)
+    url_gen = functools.partial(url_for, 'by_author', subreddit=subreddit,
+                                username=username)
 
     return render_rows(subreddit, page, url_gen,
                        restrictions={'a.author': author_id})
 
+
 if __name__ == "__main__":
     app.run()
-
